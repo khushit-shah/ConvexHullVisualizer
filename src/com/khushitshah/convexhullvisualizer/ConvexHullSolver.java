@@ -1,18 +1,19 @@
+package com.khushitshah.convexhullvisualizer;
+
 import java.awt.*;
 import java.awt.image.BufferStrategy;
 import java.util.Comparator;
 import java.util.LinkedList;
-import java.util.List;
-import java.util.Random;
 
-public class Main extends Canvas implements Runnable {
-
+public class ConvexHullSolver extends Canvas implements  Runnable{
     private final int MAX_POINTS = 200;
 
     private Thread thread;
-    private boolean isRunning = false;
 
-    private List<Point> points = new LinkedList<>();
+    private boolean isRunning = false;
+    private boolean complete = false;
+    public int ticks = 0;
+    final LinkedList<Point> points = new LinkedList<>();
     private Polygon hull = new Polygon();
 
     private int leftMostIndex;
@@ -20,32 +21,8 @@ public class Main extends Canvas implements Runnable {
     private int checkingIndex;
     private int curSelectedPoint;
 
-    private Main() {
-        Random r = new Random();
-        for (int i = 0; i < MAX_POINTS; i++) {
-            int x = r.nextInt(850) + 10;
-            int y = r.nextInt(600) + 10;
 
-            points.add(new Point(x, y));
-        }
-
-        // Let's Sort the point's;
-
-        points.sort(Comparator.comparingInt(point -> point.x));
-
-        leftMostIndex = 0;
-        curIndex = leftMostIndex;
-        curSelectedPoint = 1;
-        checkingIndex = 2;
-
-        hull.addPoint(points.get(leftMostIndex).x, points.get(leftMostIndex).y);
-
-        new Window("ConvexHull: Gift Wrapping!", 840, 620, this);
-//        this.start();
-    }
-
-    public static void main(String[] args) {
-        new Main();
+    ConvexHullSolver() {
     }
 
     public static int orientation(Point p, Point q, Point r) {
@@ -60,14 +37,34 @@ public class Main extends Canvas implements Runnable {
         if (isRunning) return;
         thread = new Thread(this);
         isRunning = true;
+        complete = false;
+
+        points.sort(Comparator.comparingInt(point -> point.x));
+
+        leftMostIndex = 0;
+        curIndex = leftMostIndex;
+        curSelectedPoint = 1;
+        checkingIndex = 2;
+
+        hull.addPoint(points.get(leftMostIndex).x, points.get(leftMostIndex).y);
+
         thread.start();
+
     }
 
-    private synchronized void stop() {
-        if (!isRunning) return;
+    synchronized void stop() {
+        if(!isRunning) return;
         try {
-            thread.join();
             isRunning = false;
+            thread.join();
+
+            hull = new Polygon();
+
+            leftMostIndex = 0;
+            curIndex = leftMostIndex;
+            curSelectedPoint = 0;
+            checkingIndex = 0;
+
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -75,16 +72,29 @@ public class Main extends Canvas implements Runnable {
 
     @Override
     public void run() {
-        while (isRunning) {
-            tick();
+        long lastTime = System.nanoTime();
+        double delta = 0;
+        long timer = System.currentTimeMillis();
+        int frames = 0;
+        while(isRunning) {
+            double ns = 1000000000. / ticks;
+            long now = System.nanoTime();
+            delta += (now - lastTime) / ns;
+            lastTime = now;
+            while(delta >= 1) {
+                if(!complete)tick(); //updates++;
+                delta--;
+            }
             render();
+            frames++;
+            if(System.currentTimeMillis() - timer > 1000) {
+                timer += 1000;
+                frames = 0;
+            }
         }
-        stop();
-
     }
 
     private void tick() {
-
 
         if (hull.contains(points.get(checkingIndex))) {
             System.out.println("Skiping Index : " + checkingIndex);
@@ -102,7 +112,7 @@ public class Main extends Canvas implements Runnable {
             hull.addPoint(points.get(curSelectedPoint).x, points.get(curSelectedPoint).y);
             if (curSelectedPoint == leftMostIndex) {
                 System.out.println(hull.npoints);
-                isRunning = false;
+                complete = true;
             }
             curIndex = curSelectedPoint;
             curSelectedPoint = 0;
@@ -119,6 +129,13 @@ public class Main extends Canvas implements Runnable {
             return;
         }
         Graphics g = bs.getDrawGraphics();
+        render(g);
+        g.dispose();
+        bs.show();
+        bs.dispose();
+    }
+
+    public void render(Graphics g) {
         g.setColor(Color.BLACK);
         g.fillRect(0, 0, this.getWidth(), this.getHeight());
 
@@ -136,7 +153,6 @@ public class Main extends Canvas implements Runnable {
         g.setColor(Color.BLUE);
         g.fillOval(points.get(checkingIndex).x, points.get(checkingIndex).y, 10, 10);
 
-//        g.setColor(Color.ORANGE);
         g.drawLine(points.get(curIndex).x, points.get(curIndex).y, points.get(curSelectedPoint).x, points.get(curSelectedPoint).y);
         g.setColor(Color.red);
 
@@ -150,9 +166,13 @@ public class Main extends Canvas implements Runnable {
             g.fillOval(hull.xpoints[i], hull.ypoints[i], 10, 10);
         }
         g.fillPolygon(hull.xpoints, hull.ypoints, hull.npoints);
+    }
 
-        g.dispose();
-        bs.show();
-        bs.dispose();
+    public void paint(Graphics g) {
+        render(g);
+    }
+
+    public void update(Graphics g) {
+        render(g);
     }
 }
